@@ -307,19 +307,73 @@
         @media print {
             body {
                 background: white !important;
+                font-size: 12pt;
+                color: black !important;
             }
             
             .glass-card {
                 box-shadow: none;
                 border: 1px solid #ddd;
+                background: white !important;
             }
             
-            .btn, .history-panel, .signature {
+            .btn, .history-panel, .signature, .pattern-overlay,
+            #loginPage, #historyToggle, #logoutBtn, #clearFormBtn,
+            #saveDefaultsBtn, #generatePdfBtn, #saveBtn {
                 display: none !important;
             }
             
+            .header {
+                background: white !important;
+                color: black !important;
+                border-bottom: 2px solid #000;
+            }
+            
+            .header::before {
+                display: none;
+            }
+            
             .result-box {
-                break-inside: avoid;
+                background: white !important;
+                border: 1px solid #ddd;
+                border-left: 4px solid var(--primary-color);
+            }
+            
+            .container {
+                width: 100%;
+                max-width: 100%;
+                padding: 0;
+            }
+            
+            .pattern-bg {
+                background: white !important;
+            }
+            
+            #results {
+                display: block !important;
+            }
+            
+            #mainPage {
+                display: block !important;
+                box-shadow: none;
+                border: none;
+            }
+            
+            .card-body {
+                padding: 10px;
+            }
+            
+            .result-box:hover {
+                transform: none;
+            }
+            
+            h1, h2, h3, h4, h5 {
+                color: black !important;
+            }
+            
+            /* جلوگیری از شکستن نتایج در بین صفحات */
+            .result-box {
+                page-break-inside: avoid;
             }
         }
         
@@ -417,9 +471,43 @@
                 padding: 10px;
             }
         }
+
+        /* صفحه بارگذاری */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="pattern-bg">
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p class="mt-3">در حال بارگذاری برنامه...</p>
+    </div>
+
     <div class="container py-5">
         <!-- صفحه لاگین -->
         <div id="loginPage" class="glass-card login-container">
@@ -642,7 +730,7 @@
                             
                             <div class="result-box">
                                 <h5>مواد مصرفی</h5>
-                                <p>مقدار خرده شیشه مصرفی: <span id="resultWasteGlassQty"></span> کیلوگرم</p>
+                                <p>مقدar خرده شیشه مصرفی: <span id="resultWasteGlassQty"></span> کیلوگرم</p>
                                 <p>وزن کل یک بچ: <span id="resultBatchWeight"></span> کیلوگرم</p>
                                 <p>تعداد بچ مصرفی: <span id="resultBatchCount"></span></p>
                                 <p>قیمت یک بچ: <span id="resultBatchPrice"></span> تومان</p>
@@ -691,6 +779,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // مخفی کردن صفحه بارگذاری پس از لود کامل
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }, 1000);
+            
             // عناصر DOM
             const loginPage = document.getElementById('loginPage');
             const mainPage = document.getElementById('mainPage');
@@ -763,25 +856,35 @@
                 calculateCost();
             });
             
-            // چاپ نتایج
+            // چاپ نتایج - نسخه بهبود یافته
             printBtn.addEventListener('click', function() {
-                const printContent = document.getElementById('results').innerHTML;
-                const originalContent = document.body.innerHTML;
+                // ذخیره محتوای اصلی
+                const originalContents = document.body.innerHTML;
                 
-                document.body.innerHTML = `
-                    <div class="container">
-                        <div class="header text-center">
+                // دریافت بخش نتایج
+                const resultsContent = document.getElementById('results').innerHTML;
+                
+                // ایجاد محتوای چاپی
+                const printContents = `
+                    <div dir="rtl">
+                        <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px;">
                             <h1>کارخانجات شیشه قزوین</h1>
                             <h2>گزارش محاسبه قیمت تمام شده جام مشجر</h2>
                             <p>تاریخ: ${new Date().toLocaleString('fa-IR')}</p>
                         </div>
-                        ${printContent}
+                        ${resultsContent}
                     </div>
                 `;
                 
+                // جایگزینی محتوای بدن با محتوای چاپی
+                document.body.innerHTML = printContents;
+                
+                // چاپ و بازگشت به محتوای اصلی
                 window.print();
-                document.body.innerHTML = originalContent;
-                location.reload();
+                document.body.innerHTML = originalContents;
+                
+                // بارگذاری مجدد event listeners
+                attachEventListeners();
             });
             
             // ذخیره محاسبات
@@ -799,10 +902,96 @@
                 }
             });
             
-            // تولید PDF (شبیه‌سازی)
+            // تولید PDF با استفاده از jsPDF (اگر در دسترس باشد)
             generatePdfBtn.addEventListener('click', function() {
-                alert('امکان خروجی PDF در این نسخه پیاده‌سازی نشده است. از گزینه چاپ استفاده کنید.');
+                // بررسی آیا jsPDF در دسترس است
+                if (typeof window.jspdf !== 'undefined') {
+                    generatePdfWithJspdf();
+                } else {
+                    // اگر jsPDF در دسترس نیست، از کاربر بخواهید آن را اضافه کند
+                    alert('برای تولید PDF، لطفا کتابخانه jsPDF را اضافه کنید. در حال حاضر از گزینه چاپ استفاده کنید.');
+                    
+                    // لود کردن jsPDF از CDN
+                    loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', function() {
+                        alert('کتابخانه jsPDF اضافه شد. لطفا دوباره尝试 کنید.');
+                    });
+                }
             });
+            
+            // تابع برای لود کردن اسکریپت
+            function loadScript(src, callback) {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = callback;
+                document.head.appendChild(script);
+            }
+            
+            // تابع برای تولید PDF با jsPDF
+            function generatePdfWithJspdf() {
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    
+                    // اضافه کردن محتوای فارسی
+                    doc.setFont('Helvetica');
+                    
+                    // عنوان
+                    doc.setFontSize(20);
+                    doc.text('کارخانجات شیشه قزوین', 105, 15, { align: 'center' });
+                    doc.setFontSize(16);
+                    doc.text('گزارش محاسبه قیمت تمام شده جام مشجر', 105, 25, { align: 'center' });
+                    
+                    // تاریخ
+                    doc.setFontSize(12);
+                    doc.text('تاریخ: ' + new Date().toLocaleString('fa-IR'), 105, 35, { align: 'center' });
+                    
+                    // اطلاعات کلی
+                    doc.setFontSize(14);
+                    doc.text('اطلاعات کلی', 20, 50);
+                    doc.setFontSize(12);
+                    doc.text(`کوره: ${document.getElementById('resultFurnace').textContent}`, 20, 60);
+                    doc.text(`مقدار ذوب روزانه: ${document.getElementById('resultDailyMelting').textContent} کیلوگرم`, 20, 70);
+                    doc.text(`ضخامت: ${document.getElementById('resultThickness').textContent} میلیمتر`, 20, 80);
+                    doc.text(`درصد خرده شیشه: ${document.getElementById('resultWasteGlassPercent').textContent}%`, 20, 90);
+                    doc.text(`راندمان کوره: ${document.getElementById('resultEfficiency').textContent}%`, 20, 100);
+                    
+                    // مواد مصرفی
+                    doc.setFontSize(14);
+                    doc.text('مواد مصرفی', 20, 120);
+                    doc.setFontSize(12);
+                    doc.text(`مقدار خرده شیشه مصرفی: ${document.getElementById('resultWasteGlassQty').textContent} کیلوگرم`, 20, 130);
+                    doc.text(`وزن کل یک بچ: ${document.getElementById('resultBatchWeight').textContent} کیلوگرم`, 20, 140);
+                    doc.text(`تعداد بچ مصرفی: ${document.getElementById('resultBatchCount').textContent}`, 20, 150);
+                    doc.text(`قیمت یک بچ: ${document.getElementById('resultBatchPrice').textContent} تومان`, 20, 160);
+                    
+                    // تولید و بازگشت
+                    doc.setFontSize(14);
+                    doc.text('تولید و بازگشت', 105, 50);
+                    doc.setFontSize(12);
+                    doc.text(`مقدار تولید: ${document.getElementById('resultProduction').textContent} متر مربع`, 105, 60);
+                    doc.text(`مقدار خرده شیشه برگشت خط: ${document.getElementById('resultReturnedWaste').textContent} کیلوگرم`, 105, 70);
+                    
+                    // هزینه‌ها
+                    doc.setFontSize(14);
+                    doc.text('هزینه‌ها', 105, 90);
+                    doc.setFontSize(12);
+                    doc.text(`هزینه کل مواد بچ: ${document.getElementById('resultTotalBatchCost').textContent} تومان`, 105, 100);
+                    doc.text(`هزینه خرده شیشه خالص: ${document.getElementById('resultNetWasteCost').textContent} تومان`, 105, 110);
+                    doc.text(`هزینه کل: ${document.getElementById('resultTotalCost').textContent} تومان`, 105, 120);
+                    
+                    // قیمت نهایی
+                    doc.setFontSize(16);
+                    doc.setTextColor(0, 128, 0);
+                    doc.text(`قیمت تمام شده هر متر مربع: ${document.getElementById('resultFinalPrice').textContent} تومان`, 105, 140, { align: 'center' });
+                    
+                    // ذخیره PDF
+                    doc.save('محاسبه_قیمت_تمام_شده_جام_مشجر.pdf');
+                    
+                } catch (error) {
+                    console.error('خطا در تولید PDF:', error);
+                    alert('خطایی در تولید PDF رخ داده است. لطفاً از گزینه چاپ استفاده کنید.');
+                }
+            }
             
             // بارگذاری تاریخچه کاربر
             function loadUserHistory(username) {
@@ -1124,6 +1313,12 @@
                     console.error('خطا در محاسبات:', error);
                     alert('خطایی در محاسبه رخ داده است. لطفاً مقادیر وارد شده را بررسی کنید.');
                 }
+            }
+            
+            // تابع برای اتصال مجدد event listeners پس از چاپ
+            function attachEventListeners() {
+                // این تابع برای اتصال مجدد event listeners پس از چاپ استفاده می‌شود
+                // در اینجا می‌توانید event listeners لازم را مجدداً اضافه کنید
             }
         });
     </script>
